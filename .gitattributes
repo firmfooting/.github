@@ -1,0 +1,17 @@
+# LF everywhere, in the index and in every checkout, whatever core.autocrlf
+# says on the machine doing the checkout. Work happens on Windows and WSL;
+# without this, git for Windows rewrites text as CRLF on checkout, WSL tools
+# write LF, and each side sees the other's files as modified. Checked by
+# firmfooting/.github's line-endings workflow.
+* text=auto eol=lf
+
+# cmd.exe misparses LF batch files, so these alone keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary

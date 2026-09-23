@@ -1,0 +1,62 @@
+# The org's line-ending rule, checked in one place and called by every
+# repository's own workflow (see any firmfooting repo's line-endings.yml).
+#
+# Why a check at all: work happens on Windows and WSL against the same
+# checkouts, and git for Windows ships core.autocrlf=true. Without a
+# .gitattributes, every Windows checkout rewrites text as CRLF, WSL tools
+# write LF, and each side sees the other's files as modified; a file
+# committed from the wrong side lands in the index with CRLF and flips on
+# every later checkout. The attribute is the fix because it travels with the
+# repository and overrides whatever a contributor's machine says. This is
+# what stops it quietly going missing again.
+#
+# Fails when:
+#   - .gitattributes is missing, or lacks `* text=auto eol=lf`;
+#   - any file is stored with CRLF (or mixed endings) in the index when its
+#     attributes do not say so -- `eol=crlf` for files that must be CRLF
+#     (.bat, .cmd, some generated formats) or `-text` for byte-exact
+#     fixtures.
+name: Line endings
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  line-endings:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require the attribute
+        run: |
+          set -euo pipefail
+          if [ ! -f .gitattributes ]; then
+            echo "::error::.gitattributes is missing. Add one starting with '* text=auto eol=lf'." >&2
+            exit 1
+          fi
+          if ! grep -Eq '^\*[[:space:]]+text=auto[[:space:]]+eol=lf([[:space:]]|$)' .gitattributes; then
+            echo "::error file=.gitattributes::lacks '* text=auto eol=lf', the org default." >&2
+            exit 1
+          fi
+      - name: Refuse undeclared CRLF in the index
+        run: |
+          set -euo pipefail
+          # ls-files --eol prints: i/<index> w/<worktree> attr/<attrs> <TAB> path
+          bad="$(git ls-files --eol \
+            | awk -F'\t' '
+                { split($1, f, /[[:space:]]+/); idx = f[1]; attr = $1 }
+                (idx == "i/crlf" || idx == "i/mixed") \
+                  && attr !~ /eol=crlf/ && attr !~ /-text/ { print $2 }')"
+          if [ -n "$bad" ]; then
+            while IFS= read -r path; do
+              echo "::error file=${path}::stored with CRLF but its attributes do not declare eol=crlf or -text" >&2
+            done <<< "$bad"
+            echo "Normalise with 'git add --renormalize .', or declare the file in .gitattributes if the CRLF is deliberate." >&2
+            exit 1
+          fi
+          echo "Every file's stored line endings match its attributes."
