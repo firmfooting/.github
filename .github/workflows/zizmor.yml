@@ -3,9 +3,10 @@
 # broader permissions than a job uses, a persisted checkout credential, a
 # template expanded inside a script, cache poisoning on a release path.
 #
-# The version is pinned here so every repository audits against the same
-# rules, and a new zizmor release cannot turn a repository red on its own.
-# Bump it in this file and every caller moves when it re-pins.
+# It runs the zizmor hook from the repository's .pre-commit-config.yaml, so
+# the version is that hook's `rev:` and nothing else. The offline audit a
+# contributor runs on commit and the online one here cannot drift apart. A
+# repository without the hook fails here rather than going unaudited.
 name: Workflow security
 
 on:
@@ -30,5 +31,7 @@ jobs:
           # A token turns on the online audits: impostor commits and actions
           # with a published advisory, both resolved against the pinned SHA.
           GH_TOKEN: ${{ github.token }}
-          ZIZMOR_VERSION: 1.30.1
-        run: uvx "zizmor@${ZIZMOR_VERSION}" --no-progress .github/workflows
+          PREK_VERSION: 0.5.3
+        # uvx, not the project's lock: the hook's `rev:` fixes zizmor either way,
+        # and a lock out of step with pyproject.toml must not fail the audit.
+        run: uvx "prek@${PREK_VERSION}" run zizmor --all-files

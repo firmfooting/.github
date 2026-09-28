@@ -31,9 +31,11 @@ jobs:
           set -euo pipefail
 
           types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
-          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+"
+          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+$"
 
-          if printf '%s' "$TITLE" | grep -Eq "$pattern"; then
+          # Matched as one string, not line by line: a title with a newline in
+          # it (possible through the API) must not pass on a later line.
+          if [[ $TITLE != *$'\n'* && $TITLE =~ $pattern ]]; then
             printf 'OK: %s\n' "$TITLE"
             exit 0
           fi
