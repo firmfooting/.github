@@ -1,0 +1,37 @@
+# Git hooks, run by prek (https://prek.j178.dev/). The file keeps the
+# `.pre-commit-config.yaml` name because that is the format prek reads.
+# Install once with `prek install`; run everything with
+# `prek run --all-files`. CI runs the same command through firmfooting/.github's
+# prek.yml, so a hook can never disagree with CI.
+#
+# Line endings are governed by .gitattributes (eol=lf), so no hook rewrites
+# files; every hook below only checks.
+minimum_pre_commit_version: "3.0.0"
+
+# No commit-msg hook: this repository squash-merges, so only the PR title
+# reaches main, and pr-title.yml checks that.
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1500]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+
+  # Markdown style. Scope and rules live in .markdownlint-cli2.yaml. This `rev:`
+  # is the only place the version is held; CI lints through this hook too.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+
+  # The workflow audit, offline here; CI's zizmor.yml adds the online audits.
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor

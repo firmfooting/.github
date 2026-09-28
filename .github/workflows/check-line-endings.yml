@@ -13,4 +13,4 @@ jobs:
   line-endings:
     permissions:
       contents: read
-    uses: ./.github/workflows/line-endings.yml
+    uses: $/.github/workflows/line-endings.yml

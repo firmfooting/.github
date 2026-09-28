@@ -1,0 +1,36 @@
+# markdownlint-cli2 configuration, read by the `markdownlint-cli2` prek hook.
+# The same policy as firmfooting/dbml-sharepoint, whose copy records the
+# measurements behind each choice. CI lints through that hook as well (see
+# firmfooting/.github's prek.yml), so the hook's `rev:` is the only version.
+
+# The ruleset is markdownlint's default. Disabling a rule needs a reason
+# written here. What each rule means:
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# No `globs:` key: markdownlint-cli2 appends it to the files the hook passes,
+# which would lint the whole tree on every commit that touches markdown.
+
+# Emitted markdown in an ignored build directory is not ours to lint.
+gitignore: true
+
+ignores:
+  - "**/node_modules/**"
+
+config:
+  # A table row cannot wrap and a fenced line is copied and run, so neither
+  # can be shortened without losing content. Prose and headings stay at 80.
+  MD013:
+    tables: false
+    code_blocks: false
+
+  # The shared firmfooting README header and footer need a `<picture>` for the
+  # dark-mode lockup, inside an `<h1>` so MD041 still sees a heading first,
+  # and a `<sub>` footer carrying a link. Any other element still fires.
+  MD033:
+    allowed_elements:
+      - h1
+      - picture
+      - source
+      - img
+      - sub
+      - a

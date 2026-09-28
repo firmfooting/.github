@@ -1,0 +1,34 @@
+# The org's workflow security audit, called by every repository's own
+# zizmor.yml. It fails on any finding: an action not pinned to a commit,
+# broader permissions than a job uses, a persisted checkout credential, a
+# template expanded inside a script, cache poisoning on a release path.
+#
+# The version is pinned here so every repository audits against the same
+# rules, and a new zizmor release cannot turn a repository red on its own.
+# Bump it in this file and every caller moves when it re-pins.
+name: Workflow security
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: false
+      - name: Audit workflows
+        env:
+          # A token turns on the online audits: impostor commits and actions
+          # with a published advisory, both resolved against the pinned SHA.
+          GH_TOKEN: ${{ github.token }}
+          ZIZMOR_VERSION: 1.30.1
+        run: uvx "zizmor@${ZIZMOR_VERSION}" --no-progress .github/workflows
