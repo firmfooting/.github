@@ -1,0 +1,15 @@
+# This repository's own run of the shared check in pr-title.yml, called by
+# path so a change to it is proved on the pull request that makes it.
+name: PR title
+
+on:
+  pull_request:
+    # `edited` matters: a title fixed after the fact must re-run the check.
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  conventional:
+    permissions: {}
+    uses: $/.github/workflows/pr-title.yml

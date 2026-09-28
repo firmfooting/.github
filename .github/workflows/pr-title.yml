@@ -1,0 +1,62 @@
+# The org's pull request title check, called by every repository's own
+# pr-title.yml.
+#
+# firmfooting repositories squash-merge, so the PR title becomes the commit
+# subject on `main`. release-please builds the changelog by parsing those
+# subjects, so a non-conventional title is dropped from the release notes and
+# nothing else fails. firmfooting/dbml-sharepoint lost four PRs from its 0.4.0
+# notes this way (#41, #42, #45, #51) and back-filled them by hand in #57.
+#
+# Checking the title is sufficient only under squash merging. A repository that
+# re-enables merge commits lets branch commits reach `main`, and needs a
+# per-commit check instead.
+name: PR title
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check the title is a conventional commit
+        env:
+          # Passed through the environment and never interpolated into the
+          # script: a PR title is attacker-controlled text.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+"
+
+          if printf '%s' "$TITLE" | grep -Eq "$pattern"; then
+            printf 'OK: %s\n' "$TITLE"
+            exit 0
+          fi
+
+          cat >&2 <<EOT
+          The pull request title is not a conventional commit.
+
+            title: $TITLE
+
+          This repository squash-merges, so the title becomes the commit subject on
+          main, and release-please builds the changelog by parsing it. A title that
+          does not match is dropped from the release notes silently.
+
+          Expected:  type(optional-scope)!: subject
+          Types:     ${types//|/, }
+
+          Examples:
+            feat: refuse a view that performs more joins than SPO serves
+            fix(deploy): a URL column aborted the paste it appeared in
+            docs: say which settings the engine reads by name
+            feat!: take the measure table name as an argument
+
+          Only feat, fix and perf reach the release notes. Pick the type from what
+          the change does, not from which directory it touches.
+          EOT
+          exit 1

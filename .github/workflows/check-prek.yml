@@ -1,0 +1,16 @@
+# This repository's own run of the shared hook gate in prek.yml, called by
+# path so a change to it is proved on the pull request that makes it.
+name: prek
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  prek:
+    permissions:
+      contents: read
+    uses: $/.github/workflows/prek.yml
