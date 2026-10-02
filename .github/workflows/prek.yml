@@ -16,7 +16,9 @@ permissions: {}
 
 jobs:
   prek:
-    runs-on: ubuntu-latest
+    # arm64: a hook or locked dependency that ships only an x86_64 binary or
+    # wheel fails here, in the calling repository, not in this one.
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     permissions:
       contents: read
     steps:

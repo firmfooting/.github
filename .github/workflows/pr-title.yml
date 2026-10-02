@@ -19,7 +19,9 @@ permissions: {}
 
 jobs:
   conventional:
-    runs-on: ubuntu-latest
+    # arm64: an action added here that ships only an x86_64 binary fails in
+    # the calling repository, not in this one.
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     permissions: {}
     steps:
       - name: Check the title is a conventional commit
