@@ -1,0 +1,138 @@
+# The org's four gates (PR title, line endings, workflow security, prek) as
+# steps of one job, so a caller pays one runner start and one checkout instead
+# of four. The separate reusable workflows stay for callers that still use them.
+#
+# The caller's `pull_request` trigger must include `ready_for_review`, or a PR
+# opened as a draft never runs this after it is marked ready. Add `edited` only
+# where the PR title check must see title edits.
+#
+# Skipped, as a whole job: draft pull requests, release-please branches, and
+# pushes whose head commit is a release commit. The PR title check runs only
+# when a pull request is opened, reopened, marked ready, or its title changes.
+name: Checks
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: The runs-on label for the job.
+        type: string
+        default: ubuntu-24.04-arm
+
+permissions: {}
+
+jobs:
+  checks:
+    if: >-
+      github.event.pull_request.draft != true
+      && !startsWith(github.head_ref, 'release-please--')
+      && !(github.event_name == 'push'
+        && (startsWith(github.event.head_commit.message, 'chore(main): release')
+          || startsWith(github.event.head_commit.message, 'chore: release')))
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the title is a conventional commit
+        if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.changes.title != null)
+        env:
+          # Passed through the environment and never interpolated into the
+          # script: a PR title is attacker-controlled text.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+$"
+
+          # Matched as one string, not line by line: a title with a newline in
+          # it (possible through the API) must not pass on a later line.
+          if [[ $TITLE != *$'\n'* && $TITLE =~ $pattern ]]; then
+            printf 'OK: %s\n' "$TITLE"
+            exit 0
+          fi
+
+          cat >&2 <<EOT
+          The pull request title is not a conventional commit.
+
+            title: $TITLE
+
+          This repository squash-merges, so the title becomes the commit subject on
+          main, and release-please builds the changelog by parsing it. A title that
+          does not match is dropped from the release notes silently.
+
+          Expected:  type(optional-scope)!: subject
+          Types:     ${types//|/, }
+
+          Examples:
+            feat: refuse a view that performs more joins than SPO serves
+            fix(deploy): a URL column aborted the paste it appeared in
+            docs: say which settings the engine reads by name
+            feat!: take the measure table name as an argument
+
+          Only feat, fix and perf reach the release notes. Pick the type from what
+          the change does, not from which directory it touches.
+          EOT
+          exit 1
+      - name: Require the attribute
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .gitattributes ]; then
+            echo "::error::.gitattributes is missing. Add one starting with '* text=auto eol=lf'." >&2
+            exit 1
+          fi
+          if ! grep -Eq '^\*[[:space:]]+text=auto[[:space:]]+eol=lf([[:space:]]|$)' .gitattributes; then
+            echo "::error file=.gitattributes::lacks '* text=auto eol=lf', the org default." >&2
+            exit 1
+          fi
+      - name: Refuse undeclared CRLF in the index
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          # ls-files --eol prints: i/<index> w/<worktree> attr/<attrs> <TAB> path
+          bad="$(git ls-files --eol \
+            | awk -F'\t' '
+                { split($1, f, /[[:space:]]+/); idx = f[1]; attr = $1 }
+                (idx == "i/crlf" || idx == "i/mixed") \
+                  && attr !~ /eol=crlf/ && attr !~ /-text/ { print $2 }')"
+          if [ -n "$bad" ]; then
+            while IFS= read -r path; do
+              echo "::error file=${path}::stored with CRLF but its attributes do not declare eol=crlf or -text" >&2
+            done <<< "$bad"
+            echo "Normalise with 'git add --renormalize .', or declare the file in .gitattributes if the CRLF is deliberate." >&2
+            exit 1
+          fi
+          echo "Every file's stored line endings match its attributes."
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: false
+      - name: Audit workflows
+        if: ${{ !cancelled() }}
+        env:
+          # A token turns on the online audits: impostor commits and actions
+          # with a published advisory, both resolved against the pinned SHA.
+          GH_TOKEN: ${{ github.token }}
+          PREK_VERSION: 0.5.3
+        # uvx, not the project's lock: the hook's `rev:` fixes zizmor either way,
+        # and a lock out of step with pyproject.toml must not fail the audit.
+        run: uvx "prek@${PREK_VERSION}" run zizmor --all-files
+      # The markdownlint hook is a node package; declared so it does not run on
+      # whatever node the runner image happens to ship.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Run every hook over the whole tree
+        if: ${{ !cancelled() }}
+        env:
+          PREK_VERSION: 0.5.3
+        run: |
+          set -euo pipefail
+          if [ -f uv.lock ]; then
+            uv run --locked prek run --all-files --show-diff-on-failure
+          else
+            uvx "prek@${PREK_VERSION}" run --all-files --show-diff-on-failure
+          fi
