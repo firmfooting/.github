@@ -19,6 +19,14 @@ on:
         description: The runs-on label for the job.
         type: string
         default: ubuntu-24.04-arm
+      private-repos:
+        description: Space-separated names of private repositories under github.com/firmfooting that prek must fetch.
+        type: string
+        default: ""
+    secrets:
+      read-token:
+        description: A token that can read the private-repos. Without it the fetch fails with git's own authentication error.
+        required: false
 
 permissions: {}
 
@@ -127,6 +135,26 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+      - name: Let git fetch the private repositories
+        if: inputs.private-repos != ''
+        env:
+          READ_TOKEN: ${{ secrets.read-token }}
+          PRIVATE_REPOS: ${{ inputs.private-repos }}
+        run: |
+          set -euo pipefail
+          if [ -z "${READ_TOKEN}" ]; then
+            echo "::warning::read-token is not available; uv cannot fetch ${PRIVATE_REPOS}."
+            exit 0
+          fi
+          for name in ${PRIVATE_REPOS}; do
+            if [[ ! $name =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "::error::private-repos entry is not a repository name." >&2
+              exit 1
+            fi
+            git config --global \
+              "url.https://x-access-token:${READ_TOKEN}@github.com/firmfooting/${name}.insteadOf" \
+              "https://github.com/firmfooting/${name}"
+          done
       - name: Run every hook over the whole tree
         if: ${{ !cancelled() }}
         env:
