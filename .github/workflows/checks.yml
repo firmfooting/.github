@@ -7,7 +7,8 @@
 # where the PR title check must see title edits.
 #
 # Skipped, as a whole job: draft pull requests, release-please branches, and
-# pushes whose head commit is a release commit. The PR title check runs only
+# pushes whose head commit is a release commit, and `edited` events that did
+# not change the title. The PR title check runs only
 # when a pull request is opened, reopened, marked ready, or its title changes.
 name: Checks
 
@@ -25,6 +26,7 @@ jobs:
   checks:
     if: >-
       github.event.pull_request.draft != true
+      && !(github.event.action == 'edited' && !github.event.changes.title)
       && !startsWith(github.head_ref, 'release-please--')
       && !(github.event_name == 'push'
         && (startsWith(github.event.head_commit.message, 'chore(main): release')
