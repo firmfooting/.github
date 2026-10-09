@@ -146,6 +146,7 @@ jobs:
             echo "::warning::read-token is not available; uv cannot fetch ${PRIVATE_REPOS}."
             exit 0
           fi
+          set -f
           for name in ${PRIVATE_REPOS}; do
             if [[ ! $name =~ ^[A-Za-z0-9._-]+$ ]]; then
               echo "::error::private-repos entry is not a repository name." >&2
