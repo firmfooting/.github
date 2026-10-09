@@ -14,6 +14,11 @@ name: PR title
 
 on:
   workflow_call:
+    inputs:
+      runner:
+        description: The runs-on label for the job.
+        type: string
+        default: ubuntu-24.04-arm
 
 permissions: {}
 
@@ -21,7 +26,7 @@ jobs:
   conventional:
     # arm64: an action added here that ships only an x86_64 binary fails in
     # the calling repository, not in this one.
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ${{ inputs.runner }}
     permissions: {}
     steps:
       - name: Check the title is a conventional commit

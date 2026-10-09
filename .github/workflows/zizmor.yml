@@ -11,6 +11,11 @@ name: Workflow security
 
 on:
   workflow_call:
+    inputs:
+      runner:
+        description: The runs-on label for the job.
+        type: string
+        default: ubuntu-24.04-arm
 
 permissions: {}
 
@@ -18,7 +23,7 @@ jobs:
   zizmor:
     # arm64: zizmor and prek install as aarch64 builds; an action or hook that
     # ships only an x86_64 binary fails in the calling repository, not here.
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
     steps:
