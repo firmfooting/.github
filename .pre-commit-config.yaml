@@ -28,7 +28,7 @@ repos:
   # Markdown style. Scope and rules live in .markdownlint-cli2.yaml. This `rev:`
   # is the only place the version is held; CI lints through this hook too.
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.2
+    rev: v0.23.3
     hooks:
       - id: markdownlint-cli2
 
