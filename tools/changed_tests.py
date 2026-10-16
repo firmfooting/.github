@@ -127,7 +127,7 @@ def imported_names(root: Path, suite: Suite) -> dict[str, set[str]]:
         for file in sorted((root / directory).rglob("*.py")):
             try:
                 tree = ast.parse(file.read_bytes())
-            except SyntaxError, ValueError:
+            except Exception:  # noqa: BLE001
                 found.setdefault("*", set()).add(file.name)  # unreadable: assume imported
                 continue
             for node in ast.walk(tree):

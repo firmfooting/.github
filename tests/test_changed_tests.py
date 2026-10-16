@@ -237,6 +237,12 @@ class ChangedTests(unittest.TestCase):
         a = module.Suite(**{**a.__dict__, "scanners": ("tests/test_app.py",)})
         self.assertEqual(module.violations(suites, a, [], scans), [])
 
+    def test_runner_parses_on_older_pythons(self):
+        # Vendored copies run on whichever Python each repository's CI uses.
+        import ast
+
+        ast.parse(RUNNER.read_text(encoding="utf-8"), feature_version=(3, 9))
+
     def test_coverage_is_refused(self):
         for arg in ["--cov", "--cov-report=xml", "--check-finding-reachability"]:
             with self.subTest(arg=arg):
