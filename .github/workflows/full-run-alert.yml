@@ -32,7 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           title="ci: hourly full suite failing on main"
-          number=$(gh issue list --state open --limit 100 --json number,title \
+          number=$(gh issue list --state open --author app/github-actions \
+            --search "\"$title\" in:title" --json number,title \
             | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')
           body="Run: $RUN_URL"$'\n'"SHA: $HEAD_SHA"
           case $RESULT in

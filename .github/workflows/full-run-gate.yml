@@ -3,8 +3,8 @@
 # hour in which nothing landed costs one small runner and no install or test.
 #
 # `run` is true when the event is not a schedule (a person forced the run), or
-# when the branch HEAD differs from the SHA of the last SUCCESSFUL scheduled
-# run of the caller's workflow. A failed run never counts, so a red SHA is
+# when the branch HEAD differs from the SHA of the last SUCCESSFUL run (scheduled
+# or dispatched) of the caller's workflow. A failed run never counts, so a red SHA is
 # retried every hour until it is green.
 name: Full-run gate
 
@@ -47,8 +47,9 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          last=$(gh run list --workflow "$WORKFLOW" --branch main --event schedule \
-            --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          # A failed lookup runs the suite rather than skipping it.
+          last=$(gh run list --workflow "$WORKFLOW" --branch main \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // ""') || last=""
           if [[ $last == "$HEAD_SHA" ]]; then
             echo "$HEAD_SHA already passed the full suite; skipping."
             echo "run=false" >> "$GITHUB_OUTPUT"
