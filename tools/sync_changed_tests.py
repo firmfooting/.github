@@ -25,6 +25,7 @@ def main() -> int:
         else:
             runner.write_bytes(source)
             data["runner_sha256"] = digest
+            data.pop("runner_revision", None)  # the digest is the only pin
             config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
     return status
 
