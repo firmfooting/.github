@@ -1,0 +1,58 @@
+# Gate for an hourly full-suite run on the default branch. A caller's scheduled
+# workflow runs this first and gates its test job on the `run` output, so an
+# hour in which nothing landed costs one small runner and no install or test.
+#
+# `run` is true when the event is not a schedule (a person forced the run), or
+# when the branch HEAD differs from the SHA of the last SUCCESSFUL scheduled
+# run of the caller's workflow. A failed run never counts, so a red SHA is
+# retried every hour until it is green.
+name: Full-run gate
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        description: File name of the caller's scheduled workflow, for example hourly.yml.
+        type: string
+        required: true
+      runner:
+        description: The runs-on label for the job.
+        type: string
+        default: ubuntu-24.04-arm
+    outputs:
+      run:
+        description: '"true" when the caller should run its full suite.'
+        value: ${{ jobs.gate.outputs.run }}
+
+permissions: {}
+
+jobs:
+  gate:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.compare.outputs.run }}
+    steps:
+      - id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+          WORKFLOW: ${{ inputs.workflow }}
+        run: |
+          set -euo pipefail
+          if [[ $EVENT != schedule ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last=$(gh run list --workflow "$WORKFLOW" --branch main --event schedule \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          if [[ $last == "$HEAD_SHA" ]]; then
+            echo "$HEAD_SHA already passed the full suite; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "last green SHA: ${last:-none}; HEAD: $HEAD_SHA"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
