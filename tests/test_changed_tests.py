@@ -178,19 +178,6 @@ class ChangedTests(unittest.TestCase):
         plan = self.plan("--file", "a/tests/data/x.json")
         self.assertEqual(set(plan), {"a", "b", "guard"})
 
-    def test_scans_select_only_the_scanners(self):
-        self.write("b/tests/test_scan.py", "# scanner\n")
-        self.suites[1].update(scans=["a/src"], scanners=["tests/test_scan.py"])
-        self.config()
-        plan = self.plan("--file", "a/tests/test_app.py", "--file", "a/src/other.txt")
-        self.assertEqual(plan["b"]["targets"], ["tests"])  # a/src change also depends
-        self.suites[1]["depends_on"] = []
-        self.config()
-        self.assertEqual(self.plan("--file", "a/src/other.txt")["b"]["targets"], ["tests/test_scan.py"])
-        self.suites[1]["scanners"] = []
-        self.config()
-        self.assertEqual(self.plan("--file", "a/src/other.txt")["b"]["targets"], ["tests"])
-
     def test_filtered_run_with_no_tests_is_success(self):
         self.suites[0]["command"] = [sys.executable, "-c", "import sys; sys.exit(5)"]
         self.config()
@@ -249,21 +236,6 @@ class ChangedTests(unittest.TestCase):
         self.assertEqual(len(module.violations(suites, a, [], scans)), 1)
         a = module.Suite(**{**a.__dict__, "scanners": ("tests/test_app.py",)})
         self.assertEqual(module.violations(suites, a, [], scans), [])
-
-    def test_scans_paths_may_only_be_read_by_scanners(self):
-        spec = importlib.util.spec_from_file_location("changed_tests", RUNNER)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        a, b = module.load_suites(self.root / ".github/changed-tests.json")[:2]
-        b = module.Suite(
-            **{**b.__dict__, "depends_on": (), "scans": ("a/src",), "scanners": ("tests/test_b.py",)}
-        )
-        path = ["a/src/app.py"]
-        ok = {path[0]: {"b/tests/test_b.py"}}
-        self.assertEqual(module.violations([a, b], b, path, {}, ok), [])
-        bad = {path[0]: {"b/tests/test_b.py", "b/tests/test_other.py"}}
-        self.assertEqual(len(module.violations([a, b], b, path, {}, bad)), 1)
-        self.assertEqual(len(module.violations([a, b], b, path, {}, {})), 1)  # read outside tests
 
     def test_coverage_is_refused(self):
         for arg in ["--cov", "--cov-report=xml", "--check-finding-reachability"]:

@@ -41,7 +41,6 @@ class Suite:
     depends_on: tuple[str, ...]
     reads: tuple[str, ...]
     scanners: tuple[str, ...]
-    scans: tuple[str, ...]
     always: bool
 
 
@@ -74,7 +73,6 @@ def load_suites(path: Path) -> list[Suite]:
             depends_on=strings(entry.get("depends_on", [])),
             reads=tuple(relative(p) for p in strings(entry.get("reads", []))),
             scanners=tuple(relative(p) for p in strings(entry.get("scanners", []))),
-            scans=tuple(relative(p) for p in strings(entry.get("scans", []))),
             always=entry.get("always", False),
         )
         if not suite.name or not suite.command or not isinstance(suite.always, bool):
@@ -171,9 +169,6 @@ def select(root: Path, suites: list[Suite], paths: list[str], full: bool) -> dic
             whole.update(suite.name for suite in suites)
             break
         whole.update(suite.name for suite in readers)
-        for suite in suites:
-            if any(under(path, p) for p in suite.scans):
-                files.setdefault(suite.name, set())  # its scanners read this path
         for suite in owners:
             # A second consumer may own a path outside its own working directory.
             local = None
@@ -190,7 +185,7 @@ def select(root: Path, suites: list[Suite], paths: list[str], full: bool) -> dic
                 whole.update(s.name for s in suites if suite.name in s.depends_on)
     for suite in suites:
         if suite.name in files:
-            # Tests that read other test modules, or `scans` paths, must see every change.
+            # Tests that read other test modules must see every changed one.
             files[suite.name].update(
                 s for s in suite.scanners if (root / join(suite.cwd, s)).is_file()
             )
@@ -208,20 +203,15 @@ def violations(
     suite: Suite,
     reads: list[str],
     scans: dict[str, list[str]],
-    readers: dict[str, set[str]] | None = None,
 ):
     """Name each file `suite` opened that its declared routes do not select the suite for."""
     if suite.always:
         return []
     known = {join(suite.cwd, s) for s in suite.scanners}
-    readers = readers or {}
     gaps: dict[str, list[str]] = {}
     for path in sorted(reads):
         owners = [s for s in suites if any(under(path, p) for p in s.paths)]
         if not owners or suite in owners or any(under(path, p) for p in suite.reads):
-            continue
-        # A `scans` path is routed to the scanners only, so only they may read it.
-        if any(under(path, p) for p in suite.scans) and path in readers and readers[path] <= known:
             continue
         if any(
             o.name in suite.depends_on and not any(under(path, d) for d in test_dirs(o))
@@ -245,13 +235,11 @@ def violations(
 
 def collect_audit(suites: list[Suite], suite: Suite, directory: Path) -> list[str]:
     reads: set[str] = set()
-    readers: dict[str, set[str]] = {}
     scans: dict[str, set[str]] = {}
     for record in directory.glob("*.json"):
         data = json.loads(record.read_text(encoding="utf-8"))
         reads.update(data["reads"])
         for reader, other in data["during_test"]:
-            readers.setdefault(other, set()).add(reader)
             if is_test_name(PurePosixPath(other).name):
                 scans.setdefault(reader, set()).add(other)
     directories = test_dirs(suite)
@@ -259,7 +247,7 @@ def collect_audit(suites: list[Suite], suite: Suite, directory: Path) -> list[st
         reader: sorted(o for o in others if o != reader and any(under(o, d) for d in directories))
         for reader, others in scans.items()
     }
-    return violations(suites, suite, sorted(reads), {k: v for k, v in inside.items() if v}, readers)
+    return violations(suites, suite, sorted(reads), {k: v for k, v in inside.items() if v})
 
 
 def is_pytest(command: tuple[str, ...]) -> bool:
