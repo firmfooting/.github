@@ -203,18 +203,25 @@ def select(root: Path, suites: list[Suite], paths: list[str], full: bool) -> dic
     }
 
 
-def violations(suites: list[Suite], suite: Suite, reads: list[str], scans: dict[str, list[str]]):
+def violations(
+    suites: list[Suite],
+    suite: Suite,
+    reads: list[str],
+    scans: dict[str, list[str]],
+    readers: dict[str, set[str]] | None = None,
+):
     """Name each file `suite` opened that its declared routes do not select the suite for."""
     if suite.always:
         return []
+    known = {join(suite.cwd, s) for s in suite.scanners}
+    readers = readers or {}
     gaps: dict[str, list[str]] = {}
     for path in sorted(reads):
         owners = [s for s in suites if any(under(path, p) for p in s.paths)]
-        if (
-            not owners
-            or suite in owners
-            or any(under(path, p) for p in (*suite.reads, *suite.scans))
-        ):
+        if not owners or suite in owners or any(under(path, p) for p in suite.reads):
+            continue
+        # A `scans` path is routed to the scanners only, so only they may read it.
+        if any(under(path, p) for p in suite.scans) and path in readers and readers[path] <= known:
             continue
         if any(
             o.name in suite.depends_on and not any(under(path, d) for d in test_dirs(o))
@@ -227,7 +234,6 @@ def violations(suites: list[Suite], suite: Suite, reads: list[str], scans: dict[
         "add depends_on or reads"
         for names, paths in sorted(gaps.items())
     ]
-    known = {join(suite.cwd, s) for s in suite.scanners}
     found += [
         f"{suite.name}: {reader} reads {len(others)} other test modules (e.g. {others[0]}): "
         "list it in scanners"
@@ -239,11 +245,13 @@ def violations(suites: list[Suite], suite: Suite, reads: list[str], scans: dict[
 
 def collect_audit(suites: list[Suite], suite: Suite, directory: Path) -> list[str]:
     reads: set[str] = set()
+    readers: dict[str, set[str]] = {}
     scans: dict[str, set[str]] = {}
     for record in directory.glob("*.json"):
         data = json.loads(record.read_text(encoding="utf-8"))
         reads.update(data["reads"])
         for reader, other in data["during_test"]:
+            readers.setdefault(other, set()).add(reader)
             if is_test_name(PurePosixPath(other).name):
                 scans.setdefault(reader, set()).add(other)
     directories = test_dirs(suite)
@@ -251,7 +259,7 @@ def collect_audit(suites: list[Suite], suite: Suite, directory: Path) -> list[st
         reader: sorted(o for o in others if o != reader and any(under(o, d) for d in directories))
         for reader, others in scans.items()
     }
-    return violations(suites, suite, sorted(reads), {k: v for k, v in inside.items() if v})
+    return violations(suites, suite, sorted(reads), {k: v for k, v in inside.items() if v}, readers)
 
 
 def is_pytest(command: tuple[str, ...]) -> bool:

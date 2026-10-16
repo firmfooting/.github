@@ -250,6 +250,21 @@ class ChangedTests(unittest.TestCase):
         a = module.Suite(**{**a.__dict__, "scanners": ("tests/test_app.py",)})
         self.assertEqual(module.violations(suites, a, [], scans), [])
 
+    def test_scans_paths_may_only_be_read_by_scanners(self):
+        spec = importlib.util.spec_from_file_location("changed_tests", RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        a, b = module.load_suites(self.root / ".github/changed-tests.json")[:2]
+        b = module.Suite(
+            **{**b.__dict__, "depends_on": (), "scans": ("a/src",), "scanners": ("tests/test_b.py",)}
+        )
+        path = ["a/src/app.py"]
+        ok = {path[0]: {"b/tests/test_b.py"}}
+        self.assertEqual(module.violations([a, b], b, path, {}, ok), [])
+        bad = {path[0]: {"b/tests/test_b.py", "b/tests/test_other.py"}}
+        self.assertEqual(len(module.violations([a, b], b, path, {}, bad)), 1)
+        self.assertEqual(len(module.violations([a, b], b, path, {}, {})), 1)  # read outside tests
+
     def test_coverage_is_refused(self):
         for arg in ["--cov", "--cov-report=xml", "--check-finding-reachability"]:
             with self.subTest(arg=arg):
