@@ -1,6 +1,10 @@
 """Exercise selection against real Git histories and subprocess exit codes."""
 
+import hashlib
+import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -77,7 +81,7 @@ class ChangedTests(unittest.TestCase):
     def test_no_changes_runs_only_guard(self):
         self.assertEqual(set(self.plan()), {"guard"})
 
-    def test_source_runs_package_and_transitive_dependants(self):
+    def test_source_runs_package_and_direct_dependants(self):
         self.write("a/src/app.py", "# changed\n")
         self.assertEqual(set(self.plan()), {"a", "b", "guard"})
         self.assertEqual(self.plan()["a"]["targets"], ["tests"])
@@ -92,22 +96,21 @@ class ChangedTests(unittest.TestCase):
         self.write("a/tests/test_new.py", "# new\n")
         self.assertEqual(self.plan()["a"]["targets"], ["tests/test_new.py"])
 
-    def test_deleted_test_expands_to_dependants(self):
+    def test_deleted_test_runs_its_suite_only(self):
         (self.root / "a/tests/test_app.py").unlink()
-        self.assertEqual(set(self.plan()), {"a", "b", "guard"})
+        self.assertEqual(set(self.plan()), {"a", "guard"})
 
     def test_renamed_test_includes_old_owner(self):
         self.git("mv", "a/tests/test_app.py", "b/tests/test_moved.py")
         self.assertEqual(set(self.plan()), {"a", "b", "guard"})
 
     def test_assets_and_helpers_expand_selection(self):
-        for path in [
-            "a/tests/conftest.py",
-            "a/tests/helpers.py",
-            "a/tests/snapshot.json",
-            "a/src/template.j2",
-            "a/uv.lock",
-        ]:
+        for path in ["a/tests/conftest.py", "a/tests/helpers.py", "a/tests/snapshot.json"]:
+            with self.subTest(path=path):
+                plan = self.plan("--file", path)
+                self.assertEqual(set(plan), {"a", "guard"})
+                self.assertEqual(plan["a"]["targets"], ["tests"])
+        for path in ["a/src/template.j2", "a/uv.lock"]:
             with self.subTest(path=path):
                 self.assertEqual(set(self.plan("--file", path)), {"a", "b", "guard"})
 
@@ -138,7 +141,12 @@ class ChangedTests(unittest.TestCase):
     def test_similarly_named_folder_is_not_a_match(self):
         self.assertEqual(set(self.plan("--file", "ab/test.py")), {"a", "b", "guard"})
 
-    def test_transitive_closure_handles_cycles(self):
+    def test_dependencies_are_direct_not_transitive(self):
+        self.suites.append(dict(name="c", cwd="c", paths=["c"], tests=["tests"], depends_on=["b"], command=["true"]))
+        self.config()
+        self.assertEqual(set(self.plan("--file", "a/src/app.py")), {"a", "b", "guard"})
+
+    def test_dependencies_handle_cycles(self):
         self.suites[0]["depends_on"] = ["b"]
         self.config()
         self.assertEqual(set(self.plan("--file", "a/src/app.py")), {"a", "b", "guard"})
@@ -147,6 +155,98 @@ class ChangedTests(unittest.TestCase):
         self.suites[1]["paths"].append("a")
         self.config()
         self.assertIn("b", self.plan("--file", "a/tests/test_app.py"))
+
+    def test_importer_of_a_changed_test_module_runs_the_suite(self):
+        self.write("a/tests/test_importer.py", "from test_app import helper\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "importer")
+        self.write("a/tests/test_app.py", "# changed\n")
+        self.assertEqual(self.plan()["a"]["targets"], ["tests"])
+        self.write("a/tests/test_importer.py", "import os\n")
+        self.assertEqual(self.plan("--file", "a/tests/test_app.py")["a"]["targets"], ["tests/test_app.py"])
+
+    def test_scanners_accompany_a_changed_test(self):
+        self.write("a/tests/test_scan.py", "# scanner\n")
+        self.suites[0]["scanners"] = ["tests/test_scan.py", "tests/test_absent.py"]
+        self.config()
+        targets = self.plan("--file", "a/tests/test_app.py")["a"]["targets"]
+        self.assertEqual(targets, ["tests/test_app.py", "tests/test_scan.py"])
+
+    def test_reads_route_a_path_to_the_reader(self):
+        self.suites[1]["reads"] = ["a/tests/data"]
+        self.config()
+        plan = self.plan("--file", "a/tests/data/x.json")
+        self.assertEqual(set(plan), {"a", "b", "guard"})
+
+    def test_filtered_run_with_no_tests_is_success(self):
+        self.suites[0]["command"] = [sys.executable, "-c", "import sys; sys.exit(5)"]
+        self.config()
+        self.assertEqual(self.run_tool("--full", "--", "-k", "x").returncode, 0)
+
+    def test_pin_mismatch_fails_verify(self):
+        shutil.copy(RUNNER, self.root / ".github/changed_tests.py")
+        digest = hashlib.sha256(RUNNER.read_bytes()).hexdigest()
+        self.write(
+            ".github/changed-tests.json",
+            json.dumps(dict(version=1, runner_sha256=digest, suites=self.suites)),
+        )
+        verify = [sys.executable, str(self.root / ".github/changed_tests.py"), "--verify"]
+        run = lambda: subprocess.run(verify, cwd=self.root, capture_output=True, check=False)  # noqa: E731
+        self.assertEqual(run().returncode, 0)
+        with (self.root / ".github/changed_tests.py").open("a") as handle:
+            handle.write("# drift\n")
+        self.assertEqual(run().returncode, 1)
+
+    def test_audit_plugin_records_reads_and_scans_of_test_modules(self):
+        self.write("a/src/data.txt", "x")
+        script = (
+            "import os, sys, types, pathlib\n"
+            f"sys.path.insert(0, {str(RUNNER.parent)!r})\n"
+            "import changed_tests as ct\n"
+            f"root = {str(self.root)!r}\n"
+            "ct.pytest_configure(types.SimpleNamespace(rootpath=pathlib.Path(root)))\n"
+            "ct.pytest_runtest_logstart('n', ('a/tests/test_app.py', 0, 'n'))\n"
+            "open(root + '/a/src/data.txt').read()\n"
+            "open(root + '/b/tests/test_b.py').read()\n"
+            "open(root + '/a/src/out.txt', 'w').write('w')\n"
+            "os.listdir(root + '/a/src')\n"
+            "ct.pytest_runtest_logfinish('n', None)\n"
+            "ct.pytest_unconfigure(None)\n"
+        )
+        scratch = self.root / "audit"
+        scratch.mkdir()
+        env = {**os.environ, "CHANGED_TESTS_AUDIT": str(scratch), "CHANGED_TESTS_ROOT": str(self.root)}
+        subprocess.run([sys.executable, "-c", script], env=env, check=True)
+        data = json.loads(next(scratch.glob("*.json")).read_text())
+        self.assertIn("a/src/data.txt", data["reads"])
+        self.assertIn("a/src", data["reads"])
+        self.assertNotIn("a/src/out.txt", data["reads"])
+        self.assertIn(["a/tests/test_app.py", "b/tests/test_b.py"], data["during_test"])
+
+    def test_route_gaps_are_reported(self):
+        spec = importlib.util.spec_from_file_location("changed_tests", RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        a, b = module.load_suites(self.root / ".github/changed-tests.json")[:2]
+        suites = [a, b]
+        self.assertEqual(module.violations(suites, b, ["a/src/app.py", "b/tests/x.py"], {}), [])
+        self.assertEqual(module.violations(suites, a, ["b/src/app.py"], {}).__len__(), 1)
+        self.assertEqual(module.violations(suites, b, ["a/tests/test_app.py"], {}).__len__(), 1)
+        scans = {"a/tests/test_app.py": ["a/tests/test_z.py"]}
+        self.assertEqual(len(module.violations(suites, a, [], scans)), 1)
+        a = module.Suite(**{**a.__dict__, "scanners": ("tests/test_app.py",)})
+        self.assertEqual(module.violations(suites, a, [], scans), [])
+
+    def test_runner_parses_on_older_pythons(self):
+        # Vendored copies run on whichever Python each repository's CI uses.
+        import ast
+
+        ast.parse(RUNNER.read_text(encoding="utf-8"), feature_version=(3, 9))
+
+    def test_coverage_is_refused(self):
+        for arg in ["--cov", "--cov-report=xml", "--check-finding-reachability"]:
+            with self.subTest(arg=arg):
+                self.assertEqual(self.run_tool("--dry-run", "--", arg).returncode, 2)
 
     def test_failure_and_no_tests_exit_codes_propagate(self):
         for status in [1, 4, 5]:
@@ -174,10 +274,6 @@ class ChangedTests(unittest.TestCase):
 
     def test_path_escape_is_rejected(self):
         self.assertNotEqual(self.run_tool("--file", "../outside.py").returncode, 0)
-
-    def test_coverage_forces_whole_suites(self):
-        self.write("a/tests/test_app.py", "# changed\n")
-        self.assertEqual(set(self.plan("--", "--cov")), {"a", "b", "guard"})
 
 
 if __name__ == "__main__":
