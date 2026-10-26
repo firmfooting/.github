@@ -147,7 +147,8 @@ jobs:
         env:
           # A token turns on the online audits: impostor commits and actions
           # with a published advisory, both resolved against the pinned SHA.
-          GH_TOKEN: ${{ github.token }}
+          # The read token also resolves a private hook repository's pin.
+          GH_TOKEN: ${{ secrets.read-token || github.token }}
           PREK_VERSION: 0.5.3
         # uvx, not the project's lock: the hook's `rev:` fixes zizmor either way,
         # and a lock out of step with pyproject.toml must not fail the audit.
