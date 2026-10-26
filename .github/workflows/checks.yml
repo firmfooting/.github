@@ -122,7 +122,7 @@ jobs:
           enable-cache: false
       # Before any prek run: prek clones every hook repository, a private one included.
       - name: Let git fetch the private repositories
-        if: inputs.private-repos != ''
+        if: ${{ !cancelled() && inputs.private-repos != '' }}
         env:
           READ_TOKEN: ${{ secrets.read-token }}
           PRIVATE_REPOS: ${{ inputs.private-repos }}
