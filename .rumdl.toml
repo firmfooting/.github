@@ -1,0 +1,41 @@
+[global]
+exclude = []
+
+# SHARED BLOCK: identical in every firmfooting repository. Change it in
+# the operations repository first, then copy it everywhere; a repo adds only
+# its own [global] exclude above this line and the marked tail below it.
+respect-gitignore = true
+line-length = 80
+# MD075 reads a wrapped `A | None` code span as an orphaned table row.
+disable = ["MD075"]
+# MD018 fixes `#389` at the start of a wrapped line into a heading.
+unfixable = ["MD018"]
+# MD060 is on by default in markdownlint; here it is opt-in. MD083 and MD084
+# cost nothing: they catch mojibake and hidden characters.
+extend-enable = ["MD060", "MD083", "MD084"]
+
+[MD003]
+style = "atx"
+[MD004]
+style = "dash"
+[MD046]
+style = "fenced"
+[MD048]
+style = "backtick"
+[MD051]
+ignore-case = false
+
+# A table row cannot wrap and a fenced line is copied and run, so neither can
+# be shortened without losing content. Prose and headings stay at 80.
+[MD013]
+code-blocks = false
+tables = false
+
+# A page with a front matter `title:` and a body H1 has one title, not two.
+[MD025]
+front-matter-title = ""
+
+# The shared README header and footer need a `<picture>` inside an `<h1>`, and
+# a `<sub>` footer carrying a link. Any other element still fires.
+[MD033]
+allowed-elements = ["h1", "picture", "source", "img", "sub", "a"]
