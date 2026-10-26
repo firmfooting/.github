@@ -120,23 +120,9 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: false
-      - name: Audit workflows
-        if: ${{ !cancelled() }}
-        env:
-          # A token turns on the online audits: impostor commits and actions
-          # with a published advisory, both resolved against the pinned SHA.
-          GH_TOKEN: ${{ github.token }}
-          PREK_VERSION: 0.5.3
-        # uvx, not the project's lock: the hook's `rev:` fixes zizmor either way,
-        # and a lock out of step with pyproject.toml must not fail the audit.
-        run: uvx "prek@${PREK_VERSION}" run zizmor --all-files
-      # The markdownlint hook is a node package; declared so it does not run on
-      # whatever node the runner image happens to ship.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
+      # Before any prek run: prek clones every hook repository, a private one included.
       - name: Let git fetch the private repositories
-        if: inputs.private-repos != ''
+        if: ${{ !cancelled() && inputs.private-repos != '' }}
         env:
           READ_TOKEN: ${{ secrets.read-token }}
           PRIVATE_REPOS: ${{ inputs.private-repos }}
@@ -156,6 +142,21 @@ jobs:
               "url.https://x-access-token:${READ_TOKEN}@github.com/firmfooting/${name}.insteadOf" \
               "https://github.com/firmfooting/${name}"
           done
+      - name: Audit workflows
+        if: ${{ !cancelled() }}
+        env:
+          # A token turns on the online audits: impostor commits and actions
+          # with a published advisory, both resolved against the pinned SHA.
+          GH_TOKEN: ${{ github.token }}
+          PREK_VERSION: 0.5.3
+        # uvx, not the project's lock: the hook's `rev:` fixes zizmor either way,
+        # and a lock out of step with pyproject.toml must not fail the audit.
+        run: uvx "prek@${PREK_VERSION}" run zizmor --all-files
+      # The markdownlint hook is a node package; declared so it does not run on
+      # whatever node the runner image happens to ship.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
       - name: Run every hook over the whole tree
         if: ${{ !cancelled() }}
         env:
