@@ -13,3 +13,5 @@ jobs:
   conventional:
     permissions: {}
     uses: $/.github/workflows/pr-title.yml
+    with:
+      runner: avrea-ubuntu-24.04-2-vcpu
