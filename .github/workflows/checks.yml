@@ -157,6 +157,8 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PREK_VERSION: 0.5.3
+          # The audit step above already ran zizmor, online.
+          SKIP: zizmor
         run: |
           set -euo pipefail
           if [ -f uv.lock ]; then
