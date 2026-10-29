@@ -23,6 +23,10 @@ on:
         description: Space-separated names of private repositories under github.com/firmfooting that prek must fetch.
         type: string
         default: ""
+      fetch-depth:
+        description: Commits of history to check out; 0 is all of it, for a hook that reads an older commit.
+        type: number
+        default: 1
     secrets:
       read-token:
         description: A token that can read the private-repos. Without it the fetch fails with git's own authentication error.
@@ -46,6 +50,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ inputs.fetch-depth }}
       - name: Check the title is a conventional commit
         if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'ready_for_review' || github.event.changes.title != null)
         env:
