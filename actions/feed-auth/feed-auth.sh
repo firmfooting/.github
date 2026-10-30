@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Exchange this job's GitHub OIDC token for an Entra token that Azure DevOps
-# accepts as the feed password, and export it for uv. See action.yml.
+# Export uv feed credentials from this job's OIDC token; see action.yml.
 set -euo pipefail
 
 # Not secrets: Entra checks the OIDC subject, not knowledge of these ids.
@@ -19,8 +18,7 @@ if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
   exit 1
 fi
 
-# Print one field of a JSON response, or its error text and fail. Neither
-# error body holds a secret: Entra's names the refused subject.
+# Print one JSON field, or the error text (it holds no secret) and fail.
 field() {
   python3 -c '
 import json, sys
