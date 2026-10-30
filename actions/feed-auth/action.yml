@@ -1,0 +1,24 @@
+# Credentials for the firmfooting package feed, with no stored secret: the
+# job's GitHub OIDC token is exchanged for a short-lived Entra token for one
+# of two service principals, and uv reads it from the environment.
+#
+# The calling job needs `permissions: id-token: write`. Entra trusts only the
+# subjects registered on each app (pull requests and main of the repositories
+# that use the feed; publish trusts main of the publishing repositories only),
+# so a job anywhere else is refused at the exchange.
+name: Firmfooting package feed credentials
+description: Export uv credentials for the firmfooting package feed from GitHub OIDC.
+
+inputs:
+  role:
+    description: "`read` to install from the feed, `publish` to also upload to it."
+    default: read
+
+runs:
+  using: composite
+  steps:
+    - name: Exchange the OIDC token for a feed token
+      shell: bash
+      env:
+        ROLE: ${{ inputs.role }}
+      run: "$GITHUB_ACTION_PATH/feed-auth.sh"
