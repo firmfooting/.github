@@ -2,16 +2,18 @@
 # Export uv feed credentials from this job's OIDC token; see action.yml.
 set -euo pipefail
 
-# Not secrets: Entra checks the OIDC subject, not knowledge of these ids.
-tenant=34bd0e8e-ed24-4df0-bc41-11969634cf15
 case "${ROLE}" in
-  read) client=498e8dde-c323-4594-8246-5c7c7bc84b3f ;;
-  publish) client=b06c5f18-c627-4cb3-98e8-5e6ad23029e8 ;;
+  read | publish) ;;
   *)
     echo "::error::role must be read or publish, not '${ROLE}'." >&2
     exit 1
     ;;
 esac
+
+if [ -z "${TENANT_ID}" ] || [ -z "${CLIENT_ID}" ]; then
+  echo "::error::tenant-id and client-id are empty: is the organisation variable visible to this repository?" >&2
+  exit 1
+fi
 
 if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
   echo "::error::No OIDC token: give this job 'permissions: id-token: write'." >&2
@@ -33,8 +35,8 @@ jwt="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
   "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" | field value)"
 
 # 499b84ac-... is Azure DevOps.
-token="$(curl -sS "https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token" \
-  --data-urlencode "client_id=${client}" \
+token="$(curl -sS "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+  --data-urlencode "client_id=${CLIENT_ID}" \
   --data-urlencode "scope=499b84ac-1321-427f-aa17-267ca6975798/.default" \
   --data-urlencode "grant_type=client_credentials" \
   --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
