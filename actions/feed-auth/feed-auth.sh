@@ -3,10 +3,10 @@
 set -euo pipefail
 
 # Not secrets: Entra checks the OIDC subject, not knowledge of these ids.
-tenant=41d8b549-db3e-445e-bfee-a41de0552875
+tenant=34bd0e8e-ed24-4df0-bc41-11969634cf15
 case "${ROLE}" in
-  read) client=56153f3a-2099-4aa8-a079-2a0421db3889 ;;
-  publish) client=9e3c2d95-b12d-4245-a5c6-345f398a4783 ;;
+  read) client=498e8dde-c323-4594-8246-5c7c7bc84b3f ;;
+  publish) client=b06c5f18-c627-4cb3-98e8-5e6ad23029e8 ;;
   *)
     echo "::error::role must be read or publish, not '${ROLE}'." >&2
     exit 1
