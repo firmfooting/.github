@@ -6,6 +6,9 @@
 # opened as a draft never runs this after it is marked ready. Add `edited` only
 # where the PR title check must see title edits.
 #
+# The job asks for `id-token: write` (the package feed's OIDC exchange), so a
+# caller must grant it too, or GitHub refuses to start the run.
+#
 # Skipped, as a whole job: draft pull requests, release-please branches, and
 # pushes whose head commit is a release commit, and `edited` events that did
 # not change the title. The PR title check runs only
@@ -27,6 +30,10 @@ on:
         description: Commits of history to check out; 0 is all of it, for a hook that reads an older commit.
         type: number
         default: 1
+      package-feed:
+        description: Get read credentials for the firmfooting package feed before prek, for a lock that resolves from it.
+        type: boolean
+        default: false
     secrets:
       read-token:
         description: A token that can read the private-repos. Without it the fetch fails with git's own authentication error.
@@ -46,6 +53,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,6 +133,9 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: false
+      - name: Get package feed credentials
+        if: ${{ !cancelled() && inputs.package-feed }}
+        uses: firmfooting/.github/actions/feed-auth@bdeb586da5f513c253eab38bf1f83be60284f871 # main 2026-10-31
       # Before any prek run: prek clones every hook repository, a private one included.
       - name: Let git fetch the private repositories
         if: ${{ !cancelled() && inputs.private-repos != '' }}
