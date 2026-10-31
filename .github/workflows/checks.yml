@@ -135,7 +135,10 @@ jobs:
           enable-cache: false
       - name: Get package feed credentials
         if: ${{ !cancelled() && inputs.package-feed }}
-        uses: firmfooting/.github/actions/feed-auth@bdeb586da5f513c253eab38bf1f83be60284f871 # main 2026-10-31
+        uses: firmfooting/.github/actions/feed-auth@59d01b30cc68d5cc0f389040eab3b3c445645f7d # main 2026-10-31
+        with:
+          tenant-id: ${{ vars.FEED_TENANT_ID }}
+          client-id: ${{ vars.FEED_READ_CLIENT_ID }}
       # Before any prek run: prek clones every hook repository, a private one included.
       - name: Let git fetch the private repositories
         if: ${{ !cancelled() && inputs.private-repos != '' }}
